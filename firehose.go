@@ -1,3 +1,4 @@
+// Package firehose provides a client for consuming the Bluesky firehose API stream
 package firehose
 
 import (
@@ -13,15 +14,18 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// FirehoseHandler defines the interface for handling firehose events
 type FirehoseHandler interface {
 	HandleEvent(*atproto.SyncSubscribeRepos_Commit) error
 }
 
+// Firehose represents a client connection to the Bluesky firehose
 type Firehose struct {
 	conn        *websocket.Conn
 	accessToken string
 }
 
+// Post represents the structure of a Bluesky post response
 type Post struct {
 	Thread struct {
 		Post struct {
@@ -37,6 +41,7 @@ type postHandler struct {
 	handler  func(string) error
 }
 
+// New creates a new Firehose client connected to the specified websocket URL
 func New(wsURL string) (*Firehose, error) {
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
@@ -45,6 +50,7 @@ func New(wsURL string) (*Firehose, error) {
 	return &Firehose{conn: conn}, nil
 }
 
+// Subscribe starts consuming the firehose stream with the provided handler
 func (f *Firehose) Subscribe(ctx context.Context, handler FirehoseHandler) error {
 	callbacks := &events.RepoStreamCallbacks{
 		RepoCommit: handler.HandleEvent,
@@ -52,6 +58,7 @@ func (f *Firehose) Subscribe(ctx context.Context, handler FirehoseHandler) error
 	return events.HandleRepoStream(ctx, f.conn, sequential.NewScheduler("firehose", callbacks.EventHandler))
 }
 
+// OnPost registers a callback function to handle new posts from the firehose
 func (f *Firehose) OnPost(ctx context.Context, handler func(string) error) error {
 	return f.Subscribe(ctx, &postHandler{
 		firehose: f,
@@ -59,6 +66,7 @@ func (f *Firehose) OnPost(ctx context.Context, handler func(string) error) error
 	})
 }
 
+// Authenticate logs into Bluesky using email/password and stores the access token
 func (f *Firehose) Authenticate(email, password string) error {
 	body, _ := json.Marshal(map[string]string{
 		"identifier": email,
@@ -81,6 +89,7 @@ func (f *Firehose) Authenticate(email, password string) error {
 	return nil
 }
 
+// HandleEvent processes individual commit events from the firehose stream
 func (h *postHandler) HandleEvent(evt *atproto.SyncSubscribeRepos_Commit) error {
 	for _, op := range evt.Ops {
 		if op.Action == "create" && strings.HasPrefix(op.Path, "app.bsky.feed.post") {
@@ -96,6 +105,7 @@ func (h *postHandler) HandleEvent(evt *atproto.SyncSubscribeRepos_Commit) error 
 	return nil
 }
 
+// FetchPost retrieves the text content of a post by its URI
 func (f *Firehose) FetchPost(uri string) (string, error) {
 	req, _ := http.NewRequest("GET", "https://bsky.social/xrpc/app.bsky.feed.getPostThread", nil)
 	req.URL.RawQuery = "uri=" + uri
@@ -114,6 +124,7 @@ func (f *Firehose) FetchPost(uri string) (string, error) {
 	return post.Thread.Post.Record.Text, nil
 }
 
+// Close terminates the firehose connection
 func (f *Firehose) Close() error {
 	return f.conn.Close()
 }
