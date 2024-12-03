@@ -14,6 +14,18 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+type JetstreamPost struct {
+	DID    string `json:"did"`
+	Time   int64  `json:"time_us"`
+	Type   string `json:"type"`
+	Kind   string `json:"kind"`
+	Commit struct {
+		Record struct {
+			Text string `json:"text"`
+		} `json:"record"`
+	} `json:"commit"`
+}
+
 // FirehoseHandler defines the interface for handling firehose events
 type FirehoseHandler interface {
 	HandleEvent(*atproto.SyncSubscribeRepos_Commit) error
@@ -139,4 +151,37 @@ func (f *Firehose) FetchPost(uri string) (string, error) {
 // Close terminates the firehose connection
 func (f *Firehose) Close() error {
 	return f.conn.Close()
+}
+
+// ConsumeJetstream consumes the Bluesky Jetstream API stream with the provided handler
+func (f *Firehose) ConsumeJetstream(ctx context.Context, handler func(JetstreamPost) error) error {
+	conn, _, err := websocket.DefaultDialer.Dial(
+		"wss://jetstream2.us-east.bsky.network/subscribe?wantedCollections=app.bsky.feed.post",
+		nil,
+	)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			_, message, err := conn.ReadMessage()
+			if err != nil {
+				return err
+			}
+
+			var post JetstreamPost
+			if err := json.Unmarshal(message, &post); err != nil {
+				continue
+			}
+
+			if err := handler(post); err != nil {
+				return err
+			}
+		}
+	}
 }
