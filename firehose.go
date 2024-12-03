@@ -154,12 +154,15 @@ func (f *Firehose) Close() error {
 }
 
 // ConsumeJetstream consumes the Bluesky Jetstream API stream with the provided handler
-func (f *Firehose) ConsumeJetstream(ctx context.Context, handler func(JetstreamPost) error) error {
+func (f *Firehose) ConsumeJetstream(ctx context.Context, handler func(JetstreamPost) error, errCallback ...func(error)) error {
 	conn, _, err := websocket.DefaultDialer.Dial(
 		"wss://jetstream2.us-east.bsky.network/subscribe?wantedCollections=app.bsky.feed.post",
 		nil,
 	)
 	if err != nil {
+		if len(errCallback) > 0 {
+			errCallback[0](err)
+		}
 		return err
 	}
 	defer conn.Close()
@@ -167,19 +170,31 @@ func (f *Firehose) ConsumeJetstream(ctx context.Context, handler func(JetstreamP
 	for {
 		select {
 		case <-ctx.Done():
+			if len(errCallback) > 0 {
+				errCallback[0](ctx.Err())
+			}
 			return ctx.Err()
 		default:
 			_, message, err := conn.ReadMessage()
 			if err != nil {
+				if len(errCallback) > 0 {
+					errCallback[0](err)
+				}
 				return err
 			}
 
 			var post JetstreamPost
 			if err := json.Unmarshal(message, &post); err != nil {
+				if len(errCallback) > 0 {
+					errCallback[0](err)
+				}
 				continue
 			}
 
 			if err := handler(post); err != nil {
+				if len(errCallback) > 0 {
+					errCallback[0](err)
+				}
 				return err
 			}
 		}

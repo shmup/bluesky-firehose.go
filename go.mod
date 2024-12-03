@@ -5,7 +5,6 @@ go 1.23.3
 require (
 	github.com/bluesky-social/indigo v0.0.0-20241202163206-72b4acb7a8f6
 	github.com/gorilla/websocket v1.5.3
-	github.com/joho/godotenv v1.5.1
 )
 
 require (
