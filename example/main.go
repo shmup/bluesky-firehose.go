@@ -3,28 +3,17 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
-	"os"
 
-	"github.com/joho/godotenv"
-
-	bsky "github.com/shmup/bluesky-firehose.go"
+	firehose "github.com/shmup/bluesky-firehose.go"
 )
 
+var client *firehose.Firehose
+
 func main() {
-	firehose, err := bsky.New("wss://bsky.network/xrpc/com.atproto.sync.subscribeRepos")
-	if err != nil {
-		log.Fatal(err)
-	}
-	godotenv.Load()
+	client, _ = firehose.New("wss://bsky.network/xrpc/com.atproto.sync.subscribeRepos")
 
-	if err := firehose.Authenticate(os.Getenv("BSKY_EMAIL"), os.Getenv("BSKY_PASSWORD")); err != nil {
-		log.Fatal(err)
-	}
-
-	firehose.OnPost(context.Background(), func(text string) error {
-		fmt.Printf("%s\n", text)
-
+	client.ConsumeJetstream(context.Background(), func(post firehose.JetstreamPost) error {
+		fmt.Printf("Post from %s: %s\n", post.DID, post.Commit.Record.Text)
 		return nil
 	})
 }
