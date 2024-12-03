@@ -68,6 +68,10 @@ func (f *Firehose) OnPost(ctx context.Context, handler func(string) error) error
 
 // Authenticate logs into Bluesky using email/password and stores the access token
 func (f *Firehose) Authenticate(email, password string) error {
+	if email == "" || password == "" {
+		return fmt.Errorf("email and password required")
+	}
+
 	body, _ := json.Marshal(map[string]string{
 		"identifier": email,
 		"password":   password,
@@ -80,9 +84,17 @@ func (f *Firehose) Authenticate(email, password string) error {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("authentication failed with status: %d", resp.StatusCode)
+	}
+
 	var auth struct{ AccessJwt string }
 	if err := json.NewDecoder(resp.Body).Decode(&auth); err != nil {
 		return err
+	}
+
+	if auth.AccessJwt == "" {
+		return fmt.Errorf("no access token received")
 	}
 
 	f.accessToken = auth.AccessJwt
